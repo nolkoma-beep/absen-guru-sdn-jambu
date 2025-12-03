@@ -1,8 +1,19 @@
 import { GoogleGenAI } from "@google/genai";
 
-// Ideally, this comes from process.env.API_KEY. 
-// For this demo environment, we assume it is injected.
-const API_KEY = process.env.API_KEY || '';
+// Helper aman untuk mengambil API Key tanpa menyebabkan crash 'process is not defined' di browser
+const getApiKey = () => {
+  try {
+    // Cek jika process tersedia (Node.js/Environment variables injection)
+    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+      return process.env.API_KEY;
+    }
+  } catch (e) {
+    // Abaikan error akses variabel
+  }
+  return '';
+};
+
+const API_KEY = getApiKey();
 
 export const generateSPPDReport = async (
   destination: string,
