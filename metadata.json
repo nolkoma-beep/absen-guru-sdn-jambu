@@ -1,0 +1,8 @@
+{
+  "name": "Absesi Guru",
+  "description": "Aplikasi absensi dan laporan perjalanan dinas (SPPD) untuk guru, dilengkapi dengan asisten AI untuk pembuatan laporan.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
