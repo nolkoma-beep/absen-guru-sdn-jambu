@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, MapPin, User, Briefcase, RefreshCw, LogIn, LogOut, ArrowLeft } from 'lucide-react';
+import { Camera, MapPin, User, Briefcase, RefreshCw, LogIn, LogOut, ArrowLeft, AlertTriangle } from 'lucide-react';
 import { Button, Card, Input, TextArea } from '../components/UIComponents';
 import { saveRecord, getUserProfile, compressImage } from '../services/storageService';
 import { AttendanceType } from '../types';
@@ -8,6 +8,13 @@ import { useNavigate } from 'react-router-dom';
 interface AttendanceProps {
   specificMode?: AttendanceType;
 }
+
+// KOORDINAT SEKOLAH: SD NEGERI JAMBU
+const SCHOOL_LOCATION = {
+  lat: -6.282759, 
+  lng: 106.264251,
+  radius: 100 // Radius dalam meter (Bisa diubah jika terlalu sempit/luas)
+};
 
 export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
   const navigate = useNavigate();
@@ -23,6 +30,10 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
   const [photo, setPhoto] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
 
+  // Geofencing State
+  const [distance, setDistance] = useState<number | null>(null);
+  const [isOutOfRange, setIsOutOfRange] = useState(false);
+
   // Mode operasional
   const mode = specificMode;
 
@@ -34,22 +45,51 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
       setNip(savedProfile.nip);
     }
 
-    // 2. Cari lokasi
+    // 2. Cari lokasi jika mode aktif
     if (mode) {
       getLocation();
     }
   }, [mode]);
+
+  // Rumus Haversine untuk hitung jarak
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371e3; // Radius bumi dalam meter
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    return R * c; // Hasil dalam meter
+  };
 
   const getLocation = () => {
     setLoadingLocation(true);
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          });
-          setLocationName(`${position.coords.latitude.toFixed(5)}, ${position.coords.longitude.toFixed(5)} (Terdeteksi Otomatis)`);
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          
+          setLocation({ lat, lng });
+          
+          // Hitung Jarak ke Sekolah
+          const dist = calculateDistance(lat, lng, SCHOOL_LOCATION.lat, SCHOOL_LOCATION.lng);
+          setDistance(dist);
+          
+          // Validasi Radius
+          if (dist > SCHOOL_LOCATION.radius) {
+            setIsOutOfRange(true);
+            setLocationName(`Diluar jangkauan (${Math.round(dist)}m dari sekolah)`);
+          } else {
+            setIsOutOfRange(false);
+            setLocationName(`${lat.toFixed(5)}, ${lng.toFixed(5)} (${Math.round(dist)}m dari sekolah)`);
+          }
+
           setLoadingLocation(false);
         },
         (error) => {
@@ -70,7 +110,7 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
       const reader = new FileReader();
       reader.onload = async (ev) => {
         const originalBase64 = ev.target?.result as string;
-        // KOMPRESI GAMBAR AGAR TIDAK BERAT SAAT DIUPLOAD
+        // KOMPRESI GAMBAR
         const compressedBase64 = await compressImage(originalBase64, 800);
         setPhoto(compressedBase64);
       };
@@ -87,10 +127,16 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
       alert("Mohon ambil foto live dan pastikan lokasi terdeteksi.");
       return;
     }
+    // Validasi Akhir Radius
+    if (isOutOfRange) {
+        alert(`Anda berada di luar radius sekolah (${Math.round(distance || 0)}m). Maksimal ${SCHOOL_LOCATION.radius}m.`);
+        return;
+    }
+
     if (!mode) return;
 
     setIsSubmitting(true);
-    setStatusMessage("Mengirim data ke server...");
+    setStatusMessage("Mengirim data...");
     
     await saveRecord({
       id: Date.now().toString(),
@@ -192,7 +238,7 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
         <Card className="flex flex-col gap-3">
             <h3 className="font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-gray-700 pb-2 mb-2 flex items-center gap-2">
                 <MapPin size={18} className="text-green-600 dark:text-green-400" />
-                LOKASI (Otomatis)
+                LOKASI (Radius 100m)
             </h3>
             
             <div className="h-32 bg-blue-50 dark:bg-gray-900 rounded-lg overflow-hidden relative border border-blue-100 dark:border-gray-700 transition-all">
@@ -206,10 +252,10 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
                        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(#3b82f6 1px, transparent 1px)', backgroundSize: '10px 10px' }}></div>
                        
                        <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
-                            <div className="w-12 h-12 bg-blue-100/50 dark:bg-blue-900/50 rounded-full flex items-center justify-center animate-ping absolute"></div>
-                            <MapPin size={32} className="text-red-500 drop-shadow-lg mb-1 relative z-20" />
-                            <span className="text-sm text-blue-700 font-bold bg-white/80 dark:bg-gray-800/80 dark:text-blue-400 px-3 py-1 rounded-full shadow-sm mt-2 backdrop-blur-sm border border-blue-100 dark:border-gray-600">
-                                Lokasi Terkunci
+                            <div className={`w-12 h-12 rounded-full flex items-center justify-center animate-ping absolute ${isOutOfRange ? 'bg-red-100/50' : 'bg-blue-100/50'}`}></div>
+                            <MapPin size={32} className={`drop-shadow-lg mb-1 relative z-20 ${isOutOfRange ? 'text-red-500' : 'text-blue-500'}`} />
+                            <span className={`text-sm font-bold bg-white/80 dark:bg-gray-800/80 px-3 py-1 rounded-full shadow-sm mt-2 backdrop-blur-sm border ${isOutOfRange ? 'text-red-600 border-red-100' : 'text-blue-700 dark:text-blue-400 border-blue-100'}`}>
+                                {isOutOfRange ? 'Diluar Radius' : 'Dalam Radius'}
                             </span>
                        </div>
                        
@@ -229,6 +275,25 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
                    </div>
                )}
             </div>
+            
+            {/* Alert Jarak */}
+            {isOutOfRange && (
+                <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-100 dark:border-red-800 flex items-start gap-2">
+                    <AlertTriangle size={18} className="text-red-500 mt-0.5 shrink-0" />
+                    <div className="text-xs text-red-600 dark:text-red-300">
+                        <span className="font-bold block mb-1">Lokasi Terlalu Jauh!</span>
+                        Anda berada <span className="font-bold underline">{Math.round(distance || 0)} meter</span> dari sekolah. 
+                        Maksimal radius adalah {SCHOOL_LOCATION.radius}m. Mohon mendekat ke lokasi.
+                    </div>
+                </div>
+            )}
+            {!isOutOfRange && location && (
+                <div className="bg-green-50 dark:bg-green-900/20 p-2 rounded-lg border border-green-100 dark:border-green-800 text-center">
+                    <p className="text-xs text-green-700 dark:text-green-300">
+                        Jarak Anda: <b>{Math.round(distance || 0)} meter</b>. (Aman)
+                    </p>
+                </div>
+            )}
         </Card>
 
         <Card className="text-center p-6 border-dashed border-2 border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-700 transition-colors">
@@ -290,7 +355,7 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
             className={`w-full text-lg shadow-xl ${isCheckIn ? 'bg-blue-600 shadow-blue-200 dark:shadow-none' : 'bg-orange-600 shadow-orange-200 dark:shadow-none hover:bg-orange-700'}`} 
             onClick={handleSubmit}
             isLoading={isSubmitting}
-            disabled={!photo || !location || !name || !nip}
+            disabled={!photo || !location || !name || !nip || isOutOfRange}
         >
             {isSubmitting ? statusMessage : (isCheckIn ? 'KIRIM ABSEN DATANG' : 'KIRIM ABSEN PULANG')}
         </Button>

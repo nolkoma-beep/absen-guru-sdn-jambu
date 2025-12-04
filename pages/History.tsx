@@ -26,7 +26,8 @@ export const History: React.FC = () => {
     <div className="p-6 pb-24 min-h-screen">
        <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Riwayat Aktivitas</h2>
-        <div className="flex gap-2 mt-4 overflow-x-auto no-scrollbar">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Catatan aktivitas di perangkat ini.</p>
+        <div className="flex gap-2 overflow-x-auto no-scrollbar">
             {['ALL', 'ATTENDANCE', 'SPPD'].map((f) => (
                 <button
                     key={f}

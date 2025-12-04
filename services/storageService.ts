@@ -4,12 +4,31 @@ const STORAGE_KEY = 'guruhadir_records';
 const PROFILE_KEY = 'guruhadir_user_profile';
 const SCRIPT_URL_KEY = 'guruhadir_script_url';
 
-// URL Default dari pengguna (Google Apps Script)
+// URL Default dari pengguna (Google Apps Script) - UPDATE KE URL TERBARU
 const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbymllukoh70QEjoUzbEMX45g0eHk8pq5jTKHH8509vwyYXxQ4pZEhpjkOs0RDxVTdpwdA/exec';
 
 export const getRecords = (): (AttendanceRecord | SPPDRecord)[] => {
   const data = localStorage.getItem(STORAGE_KEY);
   return data ? JSON.parse(data) : [];
+};
+
+export const saveRecord = async (record: AttendanceRecord | SPPDRecord): Promise<boolean> => {
+  try {
+    saveToLocalStorage(record);
+    // Simpan profile, tapi biarkan photoUrl apa adanya (undefined arguments tidak akan menimpa photoUrl yang ada)
+    saveUserProfile(record.name, record.nip);
+    
+    // Coba kirim ke Google Sheets jika URL tersedia
+    const scriptUrl = getScriptUrl();
+    if (scriptUrl) {
+       await syncToGoogleSheets(scriptUrl, record);
+    }
+
+    return true;
+  } catch (error) {
+    console.warn("Failed to save to Local Storage:", error);
+    return false;
+  }
 };
 
 // Fungsi Utilitas: Kompresi Gambar agar payload ringan
@@ -45,115 +64,104 @@ export const compressImage = (base64Str: string, maxWidth = 800): Promise<string
   });
 };
 
-export const saveRecord = async (record: AttendanceRecord | SPPDRecord): Promise<boolean> => {
-  try {
-    // 1. Simpan ke Local Storage (HP) dulu agar aman
-    saveToLocalStorage(record);
-    
-    // Simpan profile untuk auto-fill berikutnya
-    saveUserProfile(record.name, record.nip);
-    
-    // 2. KIRIM KE GOOGLE SHEETS & DRIVE (Async)
-    const scriptUrl = getScriptUrl();
-    if (scriptUrl) {
-       console.log("Mengirim data ke server...", record.type);
-       // Kita tidak perlu await di sini agar UI tidak lag, biarkan berjalan di background
-       // atau await jika ingin memastikan terkirim sebelum pindah halaman
-       await syncToGoogleSheets(scriptUrl, record);
-    }
-
-    return true;
-  } catch (error) {
-    console.warn("Failed to save process:", error);
-    // Tetap return true karena minimal sudah tersimpan di HP
-    return true; 
-  }
-};
-
 // Fungsi Sinkronisasi ke Google Sheets
 const syncToGoogleSheets = async (url: string, record: AttendanceRecord | SPPDRecord) => {
   try {
-    const dateObj = new Date(record.timestamp);
-    
-    // Payload dikirim LENGKAP dengan Base64 (yang sudah dikompres di Page)
-    const payload = {
-      action: 'save_record',
-      ...record,
-      // Format tanggal tambahan untuk spreadsheet
-      formattedDate: dateObj.toISOString().split('T')[0], // YYYY-MM-DD
-      formattedTime: dateObj.toTimeString().split(' ')[0], // HH:MM:SS
-    };
-
-    console.log("Ukuran Payload (karakter):", JSON.stringify(payload).length);
-
-    // PENTING: Gunakan method POST dengan Content-Type text/plain 
+    // Gunakan fetch dengan mode POST standard. Content-Type text/plain agar tidak terkena CORS preflight.
     await fetch(url, {
       method: 'POST',
       redirect: 'follow',
       headers: {
          'Content-Type': 'text/plain;charset=utf-8', 
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        ...record,
+        action: 'save_record' // Penanda aksi
+      })
     });
-    
-    console.log("Data berhasil dikirim ke server.");
   } catch (e) {
     console.error("Gagal sync ke Google Sheets:", e);
+    // Tidak throw error agar aplikasi tetap jalan offline
+  }
+};
+
+// --- FITUR BARU: AMBIL DATA CLOUD ---
+export interface CloudAttendance {
+  timestamp: string;
+  time: string;
+  name: string;
+  type: string;
+  location: string;
+}
+
+export const getTodayDataFromCloud = async (): Promise<CloudAttendance[]> => {
+  const url = getScriptUrl();
+  if (!url) return [];
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'get_today_data' })
+    });
+
+    if (!response.ok) return [];
+
+    const json = await response.json();
+    if (json.result === 'success' && Array.isArray(json.data)) {
+      return json.data;
+    }
+    return [];
+  } catch (error) {
+    console.error("Gagal mengambil data cloud:", error);
+    return [];
   }
 };
 
 // Helper to handle storage quota
 const saveToLocalStorage = (record: AttendanceRecord | SPPDRecord) => {
   try {
-    // KITA BUAT SALINAN DATA UNTUK DISIMPAN DI HP
-    // Agar memori HP tidak penuh, kita hapus kode foto yang panjang dari salinan ini
-    const localRecord = { ...record }; 
-    
-    // Hapus foto profil/absen dari local storage HP
-    if (localRecord.photoUrl && localRecord.photoUrl.length > 200) {
-        localRecord.photoUrl = "https://cdn-icons-png.flaticon.com/512/2965/2965327.png"; 
-        localRecord.notes = (localRecord.notes ? localRecord.notes + " " : "") + "(Foto tersimpan di Server)";
-    }
-
-    // Hapus foto lampiran SPPD dari local storage HP
-    if (localRecord.type === AttendanceType.SPPD) {
-        const sppdRec = localRecord as SPPDRecord;
-        if (sppdRec.attachments && Array.isArray(sppdRec.attachments)) {
-            sppdRec.attachments = sppdRec.attachments.map(a => 
-                (a && a.length > 200) ? "https://cdn-icons-png.flaticon.com/512/2965/2965327.png" : a
-            ).filter(Boolean) as string[];
-        }
-    }
-
     const records = getRecords();
-    const newRecords = [localRecord, ...records];
+    const newRecords = [record, ...records];
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newRecords));
   } catch (e: any) {
     // Check for QuotaExceededError
     if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22) {
       console.warn("Storage quota exceeded. Trimming old records...");
+      
+      // Strategy 1: Keep only the 10 most recent records
       try {
         const records = getRecords();
-        const trimmedRecords = records.slice(0, 10); // Simpan cuma 10 terakhir
+        const trimmedRecords = records.slice(0, 10);
         const newRecords = [record, ...trimmedRecords];
         localStorage.setItem(STORAGE_KEY, JSON.stringify(newRecords));
       } catch (retryError) {
+        // Strategy 2: If still full (e.g. large photos), save only the new record
+        console.warn("Still full. Resetting history to current record only.");
         localStorage.setItem(STORAGE_KEY, JSON.stringify([record]));
       }
+    } else {
+      throw e;
     }
   }
 };
 
 export const saveUserProfile = (name: string, nip: string, photoUrl?: string, role?: string) => {
   const current = getUserProfile();
-  const newData = {
-    ...(current || {}),
+  const newData: { name: string; nip: string; photoUrl?: string; role?: string } = {
+    ...current, // Preserve existing data like photoUrl if not provided
     name,
     nip
   };
   
-  if (photoUrl !== undefined) newData.photoUrl = photoUrl;
-  if (role !== undefined) newData.role = role;
+  if (photoUrl !== undefined) {
+    newData.photoUrl = photoUrl;
+  }
+  
+  if (role !== undefined) {
+    newData.role = role;
+  }
 
   localStorage.setItem(PROFILE_KEY, JSON.stringify(newData));
 };
@@ -165,13 +173,16 @@ export const getUserProfile = (): { name: string; nip: string; photoUrl?: string
 
 // --- URL SCRIPT CONFIG ---
 export const saveScriptUrl = (url: string) => {
+  // Hanya simpan jika user benar-benar memasukkan URL yang valid (bukan string kosong)
   if (url && url.trim().length > 0) {
       localStorage.setItem(SCRIPT_URL_KEY, url.trim());
   }
 };
 
 export const getScriptUrl = (): string => {
-  return localStorage.getItem(SCRIPT_URL_KEY) || DEFAULT_SCRIPT_URL;
+  // Prioritaskan DEFAULT_SCRIPT_URL agar aplikasi selalu terhubung
+  // Kita mengabaikan localStorage sementara ini untuk menghindari error "Failed to fetch" akibat URL kosong/salah yang tersimpan sebelumnya.
+  return DEFAULT_SCRIPT_URL;
 };
 
 export const getTodayStatus = () => {
@@ -189,7 +200,29 @@ export const getTodayStatus = () => {
   return {
     hasCheckedInToday: !!checkIn,
     hasCheckedOutToday: !!checkOut,
-    lastCheckInTime: checkIn?.timestamp
+    checkInTime: checkIn?.timestamp,
+    checkOutTime: checkOut?.timestamp
+  };
+};
+
+export const getMonthlyStats = () => {
+  const records = getRecords();
+  const now = new Date();
+  const currentMonth = now.getMonth(); // 0-11
+  const currentYear = now.getFullYear();
+
+  const thisMonthRecords = records.filter(r => {
+    const d = new Date(r.timestamp);
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  });
+
+  const hadirCount = thisMonthRecords.filter(r => r.type === AttendanceType.CHECK_IN).length;
+  const sppdCount = thisMonthRecords.filter(r => r.type === AttendanceType.SPPD).length;
+
+  return {
+    hadir: hadirCount,
+    sppd: sppdCount,
+    monthName: now.toLocaleString('id-ID', { month: 'long' })
   };
 };
 

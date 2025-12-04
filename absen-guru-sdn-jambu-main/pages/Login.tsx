@@ -56,7 +56,7 @@ export const Login: React.FC = () => {
         <form onSubmit={handleLogin} className="space-y-4">
           <Input
             label="Username"
-            placeholder="Username (sesuai spreadsheet)"
+            placeholder="Username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             required

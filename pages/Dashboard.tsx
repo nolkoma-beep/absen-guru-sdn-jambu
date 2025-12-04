@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, MapPin, CheckCircle, AlertCircle, ArrowRight, LogIn, LogOut } from 'lucide-react';
-import { Card, Button } from '../components/UIComponents';
-import { getTodayStatus, getRecords, getUserProfile } from '../services/storageService';
-import { AttendanceType, AttendanceRecord } from '../types';
+import { Clock, MapPin, CheckCircle, AlertCircle, LogIn, LogOut, Users, RefreshCw, X } from 'lucide-react';
+import { Card } from '../components/UIComponents';
+import { getTodayStatus, getUserProfile, getTodayDataFromCloud, CloudAttendance } from '../services/storageService';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 
@@ -11,9 +10,13 @@ export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [status, setStatus] = useState(getTodayStatus());
-  const [recentHistory, setRecentHistory] = useState<AttendanceRecord[]>([]);
   const [userName, setUserName] = useState('Pak Guru');
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
+
+  // State untuk Rekap Sekolah
+  const [showRecap, setShowRecap] = useState(false);
+  const [cloudData, setCloudData] = useState<CloudAttendance[]>([]);
+  const [loadingCloud, setLoadingCloud] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -25,13 +28,6 @@ export const Dashboard: React.FC = () => {
       if (profile.photoUrl) setUserPhoto(profile.photoUrl);
     }
 
-    const records = getRecords();
-    // Filter out SPPD for the quick history, just show recent 3 check-ins
-    const attRecords = records
-      .filter(r => r.type === AttendanceType.CHECK_IN || r.type === AttendanceType.CHECK_OUT)
-      .slice(0, 3) as AttendanceRecord[];
-    
-    setRecentHistory(attRecords);
     setStatus(getTodayStatus());
 
     return () => clearInterval(timer);
@@ -43,6 +39,20 @@ export const Dashboard: React.FC = () => {
     if (hour < 15) return 'Selamat Siang';
     if (hour < 18) return 'Selamat Sore';
     return 'Selamat Malam';
+  };
+
+  const handleFetchRecap = async () => {
+    // Toggle tutup jika sudah terbuka
+    if (showRecap) {
+        setShowRecap(false);
+        return;
+    }
+
+    setShowRecap(true);
+    setLoadingCloud(true);
+    const data = await getTodayDataFromCloud();
+    setCloudData(data);
+    setLoadingCloud(false);
   };
 
   return (
@@ -83,10 +93,11 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Quick Actions - UPDATED: SPLIT BUTTONS */}
+      {/* Quick Actions - GRID 2x2 */}
       <div>
         <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-3">Aksi Cepat</h3>
         <div className="grid grid-cols-2 gap-4">
+            {/* 1. Absen Datang */}
             <button 
                 onClick={() => navigate('/attendance/in')}
                 className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-blue-100 dark:border-blue-900 shadow-sm flex flex-col items-center justify-center gap-2 hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors group"
@@ -97,6 +108,7 @@ export const Dashboard: React.FC = () => {
                 <span className="font-semibold text-gray-700 dark:text-gray-300">Absen Datang</span>
             </button>
             
+            {/* 2. Absen Pulang */}
             <button 
                 onClick={() => navigate('/attendance/out')}
                 className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-orange-100 dark:border-orange-900 shadow-sm flex flex-col items-center justify-center gap-2 hover:bg-orange-50 dark:hover:bg-gray-700 transition-colors group"
@@ -107,56 +119,100 @@ export const Dashboard: React.FC = () => {
                 <span className="font-semibold text-gray-700 dark:text-gray-300">Absen Pulang</span>
             </button>
 
+            {/* 3. Laporan SPPD */}
             <button 
                 onClick={() => navigate('/sppd')}
-                className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-purple-100 dark:border-purple-900 shadow-sm flex flex-col items-center justify-center gap-2 hover:bg-purple-50 dark:hover:bg-gray-700 transition-colors group col-span-2"
+                className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-purple-100 dark:border-purple-900 shadow-sm flex flex-col items-center justify-center gap-2 hover:bg-purple-50 dark:hover:bg-gray-700 transition-colors group"
             >
                 <div className="p-3 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform">
                     <FileTextIcon />
                 </div>
-                <div className="flex flex-col items-center">
-                    <span className="font-semibold text-gray-700 dark:text-gray-300">Laporan SPPD</span>
-                    <span className="text-xs text-gray-400 dark:text-gray-500">Buat Laporan Dinas Luar</span>
+                <span className="font-semibold text-gray-700 dark:text-gray-300">Laporan SPPD</span>
+            </button>
+
+            {/* 4. Rekap Sekolah (Baru) */}
+            <button 
+                onClick={handleFetchRecap}
+                className={`p-4 rounded-xl border shadow-sm flex flex-col items-center justify-center gap-2 transition-all group ${
+                    showRecap 
+                    ? 'bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-800' 
+                    : 'bg-white dark:bg-gray-800 border-green-100 dark:border-green-900 hover:bg-green-50 dark:hover:bg-gray-700'
+                }`}
+            >
+                <div className="p-3 rounded-full bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400 group-hover:scale-110 transition-transform">
+                    <Users size={24} />
                 </div>
+                <span className="font-semibold text-gray-700 dark:text-gray-300">Rekap Sekolah</span>
             </button>
         </div>
       </div>
 
-      {/* Recent Activity */}
-      <div>
-        <div className="flex justify-between items-center mb-3">
-            <h3 className="text-lg font-bold text-gray-800 dark:text-white">Aktivitas Terakhir</h3>
-            <button onClick={() => navigate('/history')} className="text-blue-600 dark:text-blue-400 text-xs font-medium flex items-center gap-1">
-                Lihat Semua <ArrowRight size={12} />
-            </button>
-        </div>
-        
-        <div className="space-y-3">
-            {recentHistory.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-800 rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
-                    <p className="text-sm">Belum ada aktivitas.</p>
+      {/* --- REKAP SEKOLAH SECTION (Muncul jika tombol diklik) --- */}
+      {showRecap && (
+        <div className="animate-in fade-in slide-in-from-top-4 duration-300">
+             <div className="flex justify-between items-center mb-3">
+                <h3 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                    <Users size={20} className="text-green-600 dark:text-green-400" />
+                    Kehadiran Hari Ini
+                </h3>
+                <div className="flex gap-2">
+                    <button 
+                        onClick={() => { setLoadingCloud(true); getTodayDataFromCloud().then(data => { setCloudData(data); setLoadingCloud(false); }); }} 
+                        className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-full hover:bg-blue-100"
+                        disabled={loadingCloud}
+                    >
+                        <RefreshCw size={16} className={loadingCloud ? 'animate-spin' : ''} />
+                    </button>
+                    <button 
+                        onClick={() => setShowRecap(false)}
+                        className="p-2 bg-gray-100 dark:bg-gray-800 text-gray-500 rounded-full hover:bg-gray-200"
+                    >
+                        <X size={16} />
+                    </button>
                 </div>
-            ) : (
-                recentHistory.map((record, idx) => (
-                    <Card key={idx} className="flex items-center gap-4 !p-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-                            record.type === AttendanceType.CHECK_IN ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400' : 'bg-orange-100 dark:bg-orange-900/50 text-orange-600 dark:text-orange-400'
-                        }`}>
-                            {record.type === AttendanceType.CHECK_IN ? <MapPin size={18} /> : <Clock size={18} />}
-                        </div>
-                        <div className="flex-1">
-                            <h4 className="font-semibold text-gray-800 dark:text-gray-200 text-sm">{record.type === AttendanceType.CHECK_IN ? 'Absen Datang' : 'Absen Pulang'}</h4>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">{record.locationName || 'Lokasi terdeteksi'}</p>
-                        </div>
-                        <div className="text-right">
-                            <p className="font-bold text-gray-800 dark:text-gray-200 text-sm">{format(record.timestamp, 'HH:mm')}</p>
-                            <p className="text-[10px] text-gray-400 dark:text-gray-500">{format(record.timestamp, 'd MMM')}</p>
-                        </div>
-                    </Card>
-                ))
-            )}
+             </div>
+
+             {loadingCloud ? (
+                 <div className="py-12 text-center bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
+                     <RefreshCw size={32} className="animate-spin text-green-500 mx-auto mb-3" />
+                     <p className="text-sm text-gray-500">Mengambil data dari sekolah...</p>
+                 </div>
+             ) : cloudData.length === 0 ? (
+                 <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
+                    <p className="text-gray-400 dark:text-gray-500 text-sm">Belum ada data absensi dari rekan guru hari ini.</p>
+                 </div>
+             ) : (
+                 <div className="space-y-3">
+                     {cloudData.map((item, idx) => (
+                         <Card key={idx} className="flex items-center gap-3 !p-3">
+                             <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 font-bold text-sm ${
+                                 item.type === 'DATANG' 
+                                 ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' 
+                                 : 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400'
+                             }`}>
+                                 {item.name.charAt(0)}
+                             </div>
+                             <div className="flex-1 min-w-0">
+                                 <div className="flex justify-between items-start">
+                                     <h4 className="font-bold text-gray-800 dark:text-gray-200 text-sm truncate">{item.name}</h4>
+                                     <span className="font-mono text-[10px] font-bold text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
+                                         {item.time.substring(0, 5)}
+                                     </span>
+                                 </div>
+                                 <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-0.5 truncate">
+                                     <span className={`font-bold ${item.type === 'DATANG' ? 'text-green-600' : 'text-orange-600'}`}>
+                                         {item.type}
+                                     </span>
+                                     <span>•</span>
+                                     <MapPin size={10} /> {item.location || 'Lokasi GPS'}
+                                 </p>
+                             </div>
+                         </Card>
+                     ))}
+                 </div>
+             )}
         </div>
-      </div>
+      )}
     </div>
   );
 };

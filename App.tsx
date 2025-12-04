@@ -22,11 +22,7 @@ const RequireAuth = () => {
 function App() {
   return (
     <ThemeProvider>
-      {/* 
-        Menambahkan props 'future' untuk mengaktifkan fitur React Router v7 lebih awal
-        dan menghilangkan peringatan di console.
-      */}
-      <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <HashRouter>
         <Routes>
           {/* Halaman Login (Publik) */}
           <Route path="/login" element={<Login />} />
