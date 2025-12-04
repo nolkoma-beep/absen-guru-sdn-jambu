@@ -8,7 +8,7 @@ import { useTheme } from '../context/ThemeContext';
 
 export const Profile: React.FC = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState<{ name: string; nip: string; photoUrl?: string; role?: string } | null>(null);
+  const [user, setUser] = useState<{ name: string; nip: string; photoUrl?: string } | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const { theme, toggleTheme } = useTheme();
 
@@ -77,6 +77,11 @@ export const Profile: React.FC = () => {
         
         <h2 className="text-xl font-bold relative z-10">{user?.name || 'Guru SD Jambu'}</h2>
         <p className="text-blue-100 text-sm opacity-90 relative z-10">NIP. {user?.nip || '-'}</p>
+        
+        <div className="mt-4 flex justify-center gap-2 relative z-10">
+            <span className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs border border-white/20">Guru Tetap</span>
+            <span className="px-3 py-1 bg-green-500/30 backdrop-blur-md rounded-full text-xs border border-green-400/30">Aktif</span>
+        </div>
       </div>
 
       <div className="space-y-4">
@@ -120,7 +125,7 @@ export const Profile: React.FC = () => {
                 </div>
                 <div className="flex-1">
                     <p className="text-xs text-gray-500 dark:text-gray-400">Jabatan</p>
-                    <p className="text-sm font-medium text-gray-800 dark:text-white">{user?.role || 'Guru Kelas'}</p>
+                    <p className="text-sm font-medium text-gray-800 dark:text-white">Guru Kelas</p>
                 </div>
             </div>
 

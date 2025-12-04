@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Camera, MapPin, User, Briefcase, RefreshCw, LogIn, LogOut, ArrowLeft } from 'lucide-react';
 import { Button, Card, Input, TextArea } from '../components/UIComponents';
-import { saveRecord, getUserProfile, compressImage } from '../services/storageService';
+import { saveRecord, getUserProfile } from '../services/storageService';
 import { AttendanceType } from '../types';
 import { useNavigate } from 'react-router-dom';
 
@@ -13,7 +13,6 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
   const navigate = useNavigate();
   const [loadingLocation, setLoadingLocation] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('');
 
   // Form Fields
   const [name, setName] = useState('');
@@ -23,7 +22,7 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
   const [photo, setPhoto] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
 
-  // Mode operasional
+  // Mode operasional: Menggunakan props jika ada (dari URL), atau undefined (tampilkan menu)
   const mode = specificMode;
 
   useEffect(() => {
@@ -34,7 +33,7 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
       setNip(savedProfile.nip);
     }
 
-    // 2. Cari lokasi
+    // 2. Hanya cari lokasi jika mode sudah terpilih (Form sedang aktif)
     if (mode) {
       getLocation();
     }
@@ -49,6 +48,7 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
             lat: position.coords.latitude,
             lng: position.coords.longitude
           });
+          // Mock reverse geocoding for demo
           setLocationName(`${position.coords.latitude.toFixed(5)}, ${position.coords.longitude.toFixed(5)} (Terdeteksi Otomatis)`);
           setLoadingLocation(false);
         },
@@ -68,11 +68,8 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const reader = new FileReader();
-      reader.onload = async (ev) => {
-        const originalBase64 = ev.target?.result as string;
-        // KOMPRESI GAMBAR AGAR TIDAK BERAT SAAT DIUPLOAD
-        const compressedBase64 = await compressImage(originalBase64, 800);
-        setPhoto(compressedBase64);
+      reader.onload = (ev) => {
+        setPhoto(ev.target?.result as string);
       };
       reader.readAsDataURL(e.target.files[0]);
     }
@@ -90,8 +87,8 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
     if (!mode) return;
 
     setIsSubmitting(true);
-    setStatusMessage("Mengirim data ke server...");
     
+    // Save record (Async) - this will also trigger Google Sheets sync if URL is present
     await saveRecord({
       id: Date.now().toString(),
       type: mode,
@@ -109,6 +106,7 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
     navigate('/');
   };
 
+  // --- TAMPILAN 1: MENU PILIHAN (Jika tidak ada specificMode) ---
   if (!mode) {
     return (
       <div className="p-6 pb-24 space-y-6">
@@ -150,10 +148,12 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
     );
   }
 
+  // --- TAMPILAN 2: FORM ABSENSI (Datang / Pulang) ---
   const isCheckIn = mode === AttendanceType.CHECK_IN;
 
   return (
     <div className="p-6 pb-24">
+      {/* Header with Back Button */}
       <div className={`mb-6 p-4 -mx-6 -mt-6 ${isCheckIn ? 'bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-900 dark:to-indigo-900' : 'bg-gradient-to-r from-orange-500 to-red-500 dark:from-orange-900 dark:to-red-900'} text-white shadow-md`}>
          <div className="flex items-center gap-3 mb-2">
             <button onClick={() => navigate('/attendance')} className="p-1 rounded-full hover:bg-white/20 transition-colors">
@@ -169,6 +169,7 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
 
       <div className="space-y-6">
         
+        {/* Identitas Guru */}
         <Card className="space-y-4">
             <h3 className="font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-gray-700 pb-2 mb-2 flex items-center gap-2">
                 <User size={18} className="text-blue-600 dark:text-blue-400" />
@@ -189,12 +190,14 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
             />
         </Card>
 
+        {/* Lokasi Otomatis */}
         <Card className="flex flex-col gap-3">
             <h3 className="font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-gray-700 pb-2 mb-2 flex items-center gap-2">
                 <MapPin size={18} className="text-green-600 dark:text-green-400" />
                 LOKASI (Otomatis)
             </h3>
             
+            {/* Visual Map / Status */}
             <div className="h-32 bg-blue-50 dark:bg-gray-900 rounded-lg overflow-hidden relative border border-blue-100 dark:border-gray-700 transition-all">
                {loadingLocation ? (
                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-800 text-gray-400">
@@ -203,6 +206,7 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
                    </div>
                ) : location ? (
                    <>
+                       {/* Mock Map Background Pattern */}
                        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(#3b82f6 1px, transparent 1px)', backgroundSize: '10px 10px' }}></div>
                        
                        <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
@@ -231,6 +235,7 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
             </div>
         </Card>
 
+        {/* Foto Live */}
         <Card className="text-center p-6 border-dashed border-2 border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-700 transition-colors">
             <h3 className="font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-gray-700 pb-2 mb-4 flex items-center justify-center gap-2">
                 <Camera size={18} className="text-purple-600 dark:text-purple-400" />
@@ -270,6 +275,7 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
             )}
         </Card>
 
+        {/* Catatan Tambahan (Khusus Pulang) */}
         {!isCheckIn && (
             <Card>
                 <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2">
@@ -292,7 +298,7 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
             isLoading={isSubmitting}
             disabled={!photo || !location || !name || !nip}
         >
-            {isSubmitting ? statusMessage : (isCheckIn ? 'KIRIM ABSEN DATANG' : 'KIRIM ABSEN PULANG')}
+            {isCheckIn ? 'KIRIM ABSEN DATANG' : 'KIRIM ABSEN PULANG'}
         </Button>
       </div>
     </div>
