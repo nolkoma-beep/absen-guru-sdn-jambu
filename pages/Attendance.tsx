@@ -13,7 +13,7 @@ interface AttendanceProps {
 const SCHOOL_LOCATION = {
   lat: -6.282759, 
   lng: 106.264251,
-  radius: 20000 // Radius 100 Meter
+  radius: 100 // Radius 100 Meter
 };
 
 export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
