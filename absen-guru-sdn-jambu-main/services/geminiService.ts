@@ -1,21 +1,32 @@
 import { GoogleGenAI } from "@google/genai";
 
+// Helper aman untuk mengambil API Key tanpa menyebabkan crash 'process is not defined' di browser
+const getApiKey = () => {
+  try {
+    // Cek jika process tersedia (Node.js/Environment variables injection)
+    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+      return process.env.API_KEY;
+    }
+  } catch (e) {
+    // Abaikan error akses variabel
+  }
+  return '';
+};
+
+const API_KEY = getApiKey();
+
 export const generateSPPDReport = async (
   destination: string,
   activityType: string,
   duration: string
 ): Promise<string> => {
-  // Use process.env.API_KEY directly as per guidelines.
-  // Vite replaces this with the string value at build time.
-  const apiKey = process.env.API_KEY;
-
-  if (!apiKey) {
+  if (!API_KEY) {
     console.warn("API Key is missing. Returning mock data.");
     return `[Mode Demo - API Key tidak ditemukan]\n\nLaporan Kegiatan ${activityType} di ${destination}.\n\nDurasi: ${duration}\n\nSaya telah melaksanakan ${activityType} sesuai surat tugas. Kegiatan berjalan lancar, koordinasi telah dilakukan dengan pihak terkait, dan seluruh agenda kegiatan telah diselesaikan dengan baik.`;
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: API_KEY });
     
     // Using flash model for speed
     const model = 'gemini-2.5-flash';

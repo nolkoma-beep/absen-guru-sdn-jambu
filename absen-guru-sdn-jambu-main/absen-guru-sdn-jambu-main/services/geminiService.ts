@@ -5,7 +5,10 @@ export const generateSPPDReport = async (
   activityType: string,
   duration: string
 ): Promise<string> => {
+  // Use process.env.API_KEY directly as per guidelines.
+  // Vite replaces this with the string value at build time.
   const apiKey = process.env.API_KEY;
+
   if (!apiKey) {
     console.warn("API Key is missing. Returning mock data.");
     return `[Mode Demo - API Key tidak ditemukan]\n\nLaporan Kegiatan ${activityType} di ${destination}.\n\nDurasi: ${duration}\n\nSaya telah melaksanakan ${activityType} sesuai surat tugas. Kegiatan berjalan lancar, koordinasi telah dilakukan dengan pihak terkait, dan seluruh agenda kegiatan telah diselesaikan dengan baik.`;

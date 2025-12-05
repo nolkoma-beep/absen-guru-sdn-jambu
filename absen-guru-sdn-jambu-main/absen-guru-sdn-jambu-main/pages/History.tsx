@@ -22,16 +22,6 @@ export const History: React.FC = () => {
     return true;
   });
 
-  // Helper aman untuk format tanggal
-  const safeFormatDate = (timestamp: number) => {
-    if (!timestamp || isNaN(timestamp)) return 'Tanggal Error';
-    try {
-        return format(timestamp, 'dd MMM yyyy, HH:mm', { locale: id });
-    } catch (e) {
-        return 'Format Salah';
-    }
-  };
-
   return (
     <div className="p-6 pb-24 min-h-screen">
        <div className="mb-6">
@@ -73,7 +63,7 @@ export const History: React.FC = () => {
                                  record.type === AttendanceType.CHECK_OUT ? 'Pulang' : 'Laporan SPPD'}
                             </div>
                             <span className="text-xs text-gray-400 dark:text-gray-500 font-mono">
-                                {safeFormatDate(record.timestamp)}
+                                {format(record.timestamp, 'dd MMM yyyy, HH:mm', { locale: id })}
                             </span>
                         </div>
                          {/* Show NIP */}

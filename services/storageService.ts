@@ -4,34 +4,91 @@ const STORAGE_KEY = 'guruhadir_records';
 const PROFILE_KEY = 'guruhadir_user_profile';
 const SCRIPT_URL_KEY = 'guruhadir_script_url';
 
-// URL Default dari pengguna (Google Apps Script) - UPDATE KE URL TERBARU
-const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbymllukoh70QEjoUzbEMX45g0eHk8pq5jTKHH8509vwyYXxQ4pZEhpjkOs0RDxVTdpwdA/exec';
+// URL BARU DARI PENGGUNA
+const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzlX7ZuWc0lyuq3asy8i-oTZTXAupcpTeLDP57Bj3ZgtBee1warYqqtA1AhP7IqjoKP6A/exec';
 
 export const getRecords = (): (AttendanceRecord | SPPDRecord)[] => {
   const data = localStorage.getItem(STORAGE_KEY);
   return data ? JSON.parse(data) : [];
 };
 
-export const saveRecord = async (record: AttendanceRecord | SPPDRecord): Promise<boolean> => {
+export const saveRecord = async (record: AttendanceRecord | SPPDRecord): Promise<{ success: boolean; message: string }> => {
   try {
+    // 1. Simpan Lokal Dulu (Agar data aman jika offline)
     saveToLocalStorage(record);
-    // Simpan profile, tapi biarkan photoUrl apa adanya (undefined arguments tidak akan menimpa photoUrl yang ada)
     saveUserProfile(record.name, record.nip);
     
-    // Coba kirim ke Google Sheets jika URL tersedia
+    // 2. Coba kirim ke Cloud (Google Sheets)
     const scriptUrl = getScriptUrl();
     if (scriptUrl) {
        await syncToGoogleSheets(scriptUrl, record);
+       return { success: true, message: "Data tersimpan di Lokal & Server!" };
     }
 
-    return true;
-  } catch (error) {
-    console.warn("Failed to save to Local Storage:", error);
-    return false;
+    return { success: true, message: "Data tersimpan di Lokal (Offline Mode)." };
+  } catch (error: any) {
+    console.warn("Error saat menyimpan:", error);
+    return { success: true, message: "Tersimpan di Lokal. Gagal koneksi server." };
   }
 };
 
-// Fungsi Utilitas: Kompresi Gambar agar payload ringan
+// Fungsi Sinkronisasi ke Google Sheets (Backend Baru)
+const syncToGoogleSheets = async (url: string, record: AttendanceRecord | SPPDRecord) => {
+  try {
+    // Persiapkan Payload sesuai Backend Baru
+    const payload: any = {
+      action: 'save_record',
+      id: record.id,
+      timestamp: record.timestamp, // Script akan mengonversi ini jadi tanggal folder
+      nama: record.name, 
+      nip: record.nip,
+      status: record.type, // DATANG, PULANG, atau SPPD
+      lokasi: record.locationName || '',
+      latitude: record.latitude,
+      longitude: record.longitude,
+      keterangan: record.notes || ''
+    };
+
+    // Mapping Khusus SPPD
+    if (record.type === AttendanceType.SPPD) {
+      const sppd = record as SPPDRecord;
+      payload.tujuan = sppd.destination;
+      payload.jenis_kegiatan = sppd.activityType;
+      payload.tanggal_mulai = sppd.startDate;
+      payload.tanggal_selesai = sppd.endDate;
+      payload.laporan = sppd.reportSummary;
+      
+      // Kirim Foto SPPD (Multi file)
+      if (sppd.attachments && Array.isArray(sppd.attachments)) {
+        payload.foto_1 = sppd.attachments[0] || '';
+        payload.foto_2 = sppd.attachments[1] || '';
+        payload.foto_3 = sppd.attachments[2] || '';
+        payload.foto_4 = sppd.attachments[3] || '';
+      }
+    } else {
+      // Mapping Absen Biasa (Datang/Pulang) -> Single Foto
+      payload.foto = record.photoUrl || '';
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // Penting: text/plain agar tidak preflight
+      body: JSON.stringify(payload)
+    });
+    
+    const result = await response.json();
+    if (result.result !== 'success') {
+        throw new Error(result.message || "Gagal menyimpan di sisi server");
+    }
+
+  } catch (e) {
+    console.error("Gagal sync ke Google Sheets:", e);
+    throw e; // Lempar error agar bisa ditangkap saveRecord
+  }
+};
+
+// Fungsi Utilitas: Kompresi Gambar agar payload ringan & cepat upload
 export const compressImage = (base64Str: string, maxWidth = 800): Promise<string> => {
   return new Promise((resolve) => {
     const img = new Image();
@@ -64,28 +121,7 @@ export const compressImage = (base64Str: string, maxWidth = 800): Promise<string
   });
 };
 
-// Fungsi Sinkronisasi ke Google Sheets
-const syncToGoogleSheets = async (url: string, record: AttendanceRecord | SPPDRecord) => {
-  try {
-    // Gunakan fetch dengan mode POST standard. Content-Type text/plain agar tidak terkena CORS preflight.
-    await fetch(url, {
-      method: 'POST',
-      redirect: 'follow',
-      headers: {
-         'Content-Type': 'text/plain;charset=utf-8', 
-      },
-      body: JSON.stringify({
-        ...record,
-        action: 'save_record' // Penanda aksi
-      })
-    });
-  } catch (e) {
-    console.error("Gagal sync ke Google Sheets:", e);
-    // Tidak throw error agar aplikasi tetap jalan offline
-  }
-};
-
-// --- FITUR BARU: AMBIL DATA CLOUD ---
+// --- FITUR: REKAP SEKOLAH (Get Data) ---
 export interface CloudAttendance {
   timestamp: string;
   time: string;
@@ -119,26 +155,25 @@ export const getTodayDataFromCloud = async (): Promise<CloudAttendance[]> => {
   }
 };
 
-// Helper to handle storage quota
+// --- LOCAL STORAGE HELPERS ---
+
 const saveToLocalStorage = (record: AttendanceRecord | SPPDRecord) => {
   try {
     const records = getRecords();
     const newRecords = [record, ...records];
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newRecords));
   } catch (e: any) {
-    // Check for QuotaExceededError
+    // Handle Quota Penuh
     if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22) {
       console.warn("Storage quota exceeded. Trimming old records...");
-      
-      // Strategy 1: Keep only the 10 most recent records
       try {
         const records = getRecords();
-        const trimmedRecords = records.slice(0, 10);
+        // Simpan cuma 5 terakhir agar muat
+        const trimmedRecords = records.slice(0, 5);
         const newRecords = [record, ...trimmedRecords];
         localStorage.setItem(STORAGE_KEY, JSON.stringify(newRecords));
       } catch (retryError) {
-        // Strategy 2: If still full (e.g. large photos), save only the new record
-        console.warn("Still full. Resetting history to current record only.");
+        // Jika masih penuh, reset history
         localStorage.setItem(STORAGE_KEY, JSON.stringify([record]));
       }
     } else {
@@ -150,18 +185,13 @@ const saveToLocalStorage = (record: AttendanceRecord | SPPDRecord) => {
 export const saveUserProfile = (name: string, nip: string, photoUrl?: string, role?: string) => {
   const current = getUserProfile();
   const newData: { name: string; nip: string; photoUrl?: string; role?: string } = {
-    ...current, // Preserve existing data like photoUrl if not provided
+    ...current, 
     name,
     nip
   };
   
-  if (photoUrl !== undefined) {
-    newData.photoUrl = photoUrl;
-  }
-  
-  if (role !== undefined) {
-    newData.role = role;
-  }
+  if (photoUrl !== undefined) newData.photoUrl = photoUrl;
+  if (role !== undefined) newData.role = role;
 
   localStorage.setItem(PROFILE_KEY, JSON.stringify(newData));
 };
@@ -173,15 +203,13 @@ export const getUserProfile = (): { name: string; nip: string; photoUrl?: string
 
 // --- URL SCRIPT CONFIG ---
 export const saveScriptUrl = (url: string) => {
-  // Hanya simpan jika user benar-benar memasukkan URL yang valid (bukan string kosong)
   if (url && url.trim().length > 0) {
       localStorage.setItem(SCRIPT_URL_KEY, url.trim());
   }
 };
 
 export const getScriptUrl = (): string => {
-  // Prioritaskan DEFAULT_SCRIPT_URL agar aplikasi selalu terhubung
-  // Kita mengabaikan localStorage sementara ini untuk menghindari error "Failed to fetch" akibat URL kosong/salah yang tersimpan sebelumnya.
+  // Menggunakan URL yang hardcoded di atas
   return DEFAULT_SCRIPT_URL;
 };
 
@@ -208,7 +236,7 @@ export const getTodayStatus = () => {
 export const getMonthlyStats = () => {
   const records = getRecords();
   const now = new Date();
-  const currentMonth = now.getMonth(); // 0-11
+  const currentMonth = now.getMonth(); 
   const currentYear = now.getFullYear();
 
   const thisMonthRecords = records.filter(r => {

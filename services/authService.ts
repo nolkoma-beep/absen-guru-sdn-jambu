@@ -2,50 +2,66 @@ import { saveUserProfile, getScriptUrl } from './storageService';
 
 const AUTH_KEY = 'guruhadir_is_authenticated';
 
-// Database Foto (Mapping Nama -> URL)
-const PHOTO_DATABASE: Record<string, string> = {
-  "ASEP AWALUDIN,S.Pd": "https://iili.io/fzNJbOQ.jpg",
-  "MUNJI, S.Pd.I": "https://iili.io/fzN21uR.jpg",
-  "MARTINI, S.Pd.I": "https://iili.io/fzNFX7s.jpg",
-  "MINARTI, S.Pd.I": "https://iili.io/fzNKoyG.jpg",
-  "DEWI HOFIANTINI, S.Pd": "https://iili.io/fzNCTJ9.jpg",
-  "A. BAIRONI,S.Pd": "https://iili.io/fzNCUen.jpg",
-  "HERNAWATI, S.Pd": "https://iili.io/fzNfoKP.jpg",
-  "AHMAD FAHMI, S.Pd.I": "https://iili.io/fzN3GHb.jpg",
-  "AMNIATUSHALIHAT, S.Pd": "https://iili.io/fzNq7ku.jpg"
+interface UserData {
+  photo: string;
+  role: string;
+}
+
+// Database Terpusat (Foto & Jabatan) - Menghilangkan duplikasi key nama
+const USER_DATABASE: Record<string, UserData> = {
+  "ASEP AWALUDIN,S.Pd": { 
+    photo: "https://iili.io/fzNJbOQ.jpg", 
+    role: "Kepala Sekolah" 
+  },
+  "MUNJI, S.Pd.I": { 
+    photo: "https://iili.io/fzN21uR.jpg", 
+    role: "Guru Agama" 
+  },
+  "MARTINI, S.Pd.I": { 
+    photo: "https://iili.io/fzNFX7s.jpg", 
+    role: "Guru Kelas" 
+  },
+  "MINARTI, S.Pd.I": { 
+    photo: "https://iili.io/fzNKoyG.jpg", 
+    role: "Guru Kelas" 
+  },
+  "DEWI HOFIANTINI, S.Pd": { 
+    photo: "https://iili.io/fzNCTJ9.jpg", 
+    role: "Guru Kelas" 
+  },
+  "A. BAIRONI,S.Pd": { 
+    photo: "https://iili.io/fzNCUen.jpg", 
+    role: "Guru Kelas" 
+  },
+  "HERNAWATI, S.Pd": { 
+    photo: "https://iili.io/fzNfoKP.jpg", 
+    role: "Guru Kelas" 
+  },
+  "AHMAD FAHMI, S.Pd.I": { 
+    photo: "https://iili.io/fzN3GHb.jpg", 
+    role: "Guru Kelas" 
+  },
+  "AMNIATUSHALIHAT, S.Pd": { 
+    photo: "https://iili.io/fzNq7ku.jpg", 
+    role: "Guru PJOK" 
+  }
 };
 
-// Database Jabatan (Mapping Nama -> Role)
-const ROLE_DATABASE: Record<string, string> = {
-  "ASEP AWALUDIN,S.Pd": "Kepala Sekolah",
-  "MUNJI, S.Pd.I": "Guru Agama",
-  "MARTINI, S.Pd.I": "Guru Kelas",
-  "MINARTI, S.Pd.I": "Guru Kelas",
-  "DEWI HOFIANTINI, S.Pd": "Guru Kelas",
-  "A. BAIRONI,S.Pd": "Guru Kelas",
-  "HERNAWATI, S.Pd": "Guru Kelas",
-  "AHMAD FAHMI, S.Pd.I": "Guru Kelas",
-  "AMNIATUSHALIHAT, S.Pd": "Guru PJOK"
-};
-
-// Helper untuk mencari foto berdasarkan nama (Case Insensitive)
-const getPhotoByName = (name: string): string | undefined => {
+// Helper untuk mencari key user (Case Insensitive) agar tidak menulis logika pencarian berulang kali
+const findUserKey = (name: string): string | undefined => {
   if (!name) return undefined;
   const normalizedSearch = name.trim().toLowerCase();
-  const matchedKey = Object.keys(PHOTO_DATABASE).find(key => 
-    key.toLowerCase() === normalizedSearch
-  );
-  return matchedKey ? PHOTO_DATABASE[matchedKey] : undefined;
+  return Object.keys(USER_DATABASE).find(key => key.toLowerCase() === normalizedSearch);
 };
 
-// Helper untuk mencari jabatan berdasarkan nama (Case Insensitive)
+const getPhotoByName = (name: string): string | undefined => {
+  const key = findUserKey(name);
+  return key ? USER_DATABASE[key].photo : undefined;
+};
+
 const getRoleByName = (name: string): string => {
-  if (!name) return "Guru Kelas"; // Default
-  const normalizedSearch = name.trim().toLowerCase();
-  const matchedKey = Object.keys(ROLE_DATABASE).find(key => 
-    key.toLowerCase() === normalizedSearch
-  );
-  return matchedKey ? ROLE_DATABASE[matchedKey] : "Guru Kelas";
+  const key = findUserKey(name);
+  return key ? USER_DATABASE[key].role : "Guru Kelas";
 };
 
 export interface LoginResult {
@@ -58,7 +74,7 @@ export const login = async (username: string, password: string): Promise<LoginRe
 
   let scriptUrl = getScriptUrl();
 
-  // 1. Jika URL Spreadsheet BELUM diisi, gunakan Mode Offline/Demo
+  // 1. Mode Offline/Demo (Jika URL belum diisi)
   if (!scriptUrl) {
     if (password === '123456') {
       localStorage.setItem(AUTH_KEY, 'true');
@@ -84,7 +100,7 @@ export const login = async (username: string, password: string): Promise<LoginRe
      return { success: false, message: "URL salah. Gunakan URL 'Web App' yang berakhiran '/exec' (Bukan /dev atau /edit)." };
   }
 
-  // 2. Jika URL Spreadsheet SUDAH diisi, cek ke server
+  // 2. Mode Online (Cek ke Server)
   try {
     const response = await fetch(scriptUrl, {
       method: 'POST',
@@ -106,15 +122,15 @@ export const login = async (username: string, password: string): Promise<LoginRe
     if (result.result === 'success') {
       localStorage.setItem(AUTH_KEY, 'true');
       
-      // Ambil nama dari response server
+      // Ambil data dari server
       const serverName = result.data.name;
 
-      // Cari Foto & Jabatan
+      // Ambil data pelengkap dari database lokal (Foto & Jabatan)
       const matchedPhoto = getPhotoByName(serverName);
       const finalPhotoUrl = result.data.photoUrl || matchedPhoto;
       const role = getRoleByName(serverName);
       
-      // Simpan profil lengkap ke storage
+      // Simpan profil lengkap
       saveUserProfile(serverName, result.data.nip, finalPhotoUrl, role);
       
       return { success: true };
@@ -129,7 +145,7 @@ export const login = async (username: string, password: string): Promise<LoginRe
     if (errorMsg.includes('Failed to fetch')) {
         return { 
             success: false, 
-            message: "Gagal terhubung. Pastikan Deployment Access di Google Script diatur ke 'Anyone' (Siapa Saja) dan Anda memiliki koneksi internet." 
+            message: "Gagal terhubung. Pastikan Deployment Access di Google Script diatur ke 'Anyone' (Siapa Saja)." 
         };
     }
 
@@ -139,7 +155,6 @@ export const login = async (username: string, password: string): Promise<LoginRe
 
 export const logout = () => {
   localStorage.removeItem(AUTH_KEY);
-  // User harus login lagi untuk refresh session/data.
 };
 
 export const isAuthenticated = (): boolean => {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, MapPin, User, Briefcase, RefreshCw, LogIn, LogOut, ArrowLeft, AlertTriangle } from 'lucide-react';
+import { Camera, MapPin, User, Briefcase, RefreshCw, LogIn, LogOut, ArrowLeft, AlertTriangle, CheckCircle } from 'lucide-react';
 import { Button, Card, Input, TextArea } from '../components/UIComponents';
-import { saveRecord, getUserProfile, compressImage } from '../services/storageService';
+import { saveRecord, getUserProfile, compressImage, getTodayStatus } from '../services/storageService';
 import { AttendanceType } from '../types';
 import { useNavigate } from 'react-router-dom';
 
@@ -9,11 +9,11 @@ interface AttendanceProps {
   specificMode?: AttendanceType;
 }
 
-// KOORDINAT SEKOLAH: SD NEGERI JAMBU
+// KOORDINAT SEKOLAH: SD NEGERI JAMBU (Updated)
 const SCHOOL_LOCATION = {
   lat: -6.282759, 
   lng: 106.264251,
-  radius: 100 // Radius dalam meter (Bisa diubah jika terlalu sempit/luas)
+  radius: 100 // Radius 100 Meter
 };
 
 export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
@@ -33,23 +33,42 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
   // Geofencing State
   const [distance, setDistance] = useState<number | null>(null);
   const [isOutOfRange, setIsOutOfRange] = useState(false);
+  
+  // Status Harian (Untuk Cek Double Absen)
+  const [todayStatus, setTodayStatus] = useState(getTodayStatus());
 
   // Mode operasional
   const mode = specificMode;
 
   useEffect(() => {
-    // 1. Load User Profile (Auto-fill)
+    // 1. Refresh status harian terbaru
+    const currentStatus = getTodayStatus();
+    setTodayStatus(currentStatus);
+
+    // 2. Proteksi Double Absen (Jika akses via URL langsung)
+    if (mode === AttendanceType.CHECK_IN && currentStatus.hasCheckedInToday) {
+        alert("Anda sudah melakukan Absen Datang hari ini. Tidak bisa input ulang.");
+        navigate('/attendance');
+        return;
+    }
+    if (mode === AttendanceType.CHECK_OUT && currentStatus.hasCheckedOutToday) {
+        alert("Anda sudah melakukan Absen Pulang hari ini. Tidak bisa input ulang.");
+        navigate('/attendance');
+        return;
+    }
+
+    // 3. Load User Profile (Auto-fill)
     const savedProfile = getUserProfile();
     if (savedProfile) {
       setName(savedProfile.name);
       setNip(savedProfile.nip);
     }
 
-    // 2. Cari lokasi jika mode aktif
+    // 4. Cari lokasi jika mode aktif
     if (mode) {
       getLocation();
     }
-  }, [mode]);
+  }, [mode, navigate]);
 
   // Rumus Haversine untuk hitung jarak
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -111,14 +130,32 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
       reader.onload = async (ev) => {
         const originalBase64 = ev.target?.result as string;
         // KOMPRESI GAMBAR
-        const compressedBase64 = await compressImage(originalBase64, 800);
-        setPhoto(compressedBase64);
+        try {
+            const compressedBase64 = await compressImage(originalBase64, 800);
+            setPhoto(compressedBase64);
+        } catch (err) {
+            console.error("Kompresi gagal, pakai original", err);
+            setPhoto(originalBase64);
+        }
       };
       reader.readAsDataURL(e.target.files[0]);
     }
   };
 
   const handleSubmit = async () => {
+    // Validasi Double Absen (Safety Check Terakhir)
+    const latestStatus = getTodayStatus();
+    if (mode === AttendanceType.CHECK_IN && latestStatus.hasCheckedInToday) {
+        alert("Gagal: Data absen datang hari ini sudah ada.");
+        navigate('/');
+        return;
+    }
+    if (mode === AttendanceType.CHECK_OUT && latestStatus.hasCheckedOutToday) {
+        alert("Gagal: Data absen pulang hari ini sudah ada.");
+        navigate('/');
+        return;
+    }
+
     if (!name || !nip) {
       alert("Mohon lengkapi Nama dan NIP/NUPTK.");
       return;
@@ -136,9 +173,10 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
     if (!mode) return;
 
     setIsSubmitting(true);
-    setStatusMessage("Mengirim data...");
+    setStatusMessage("Sedang mengirim data...");
     
-    await saveRecord({
+    // Gunakan saveRecord
+    const result = await saveRecord({
       id: Date.now().toString(),
       type: mode,
       timestamp: Date.now(),
@@ -152,7 +190,13 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
     });
     
     setIsSubmitting(false);
-    navigate('/');
+
+    if (result.success) {
+      alert(result.message);
+      navigate('/');
+    } else {
+      alert("Gagal: " + result.message);
+    }
   };
 
   if (!mode) {
@@ -164,31 +208,68 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
         </div>
 
         <div className="grid gap-4">
+          {/* TOMBOL ABSEN DATANG */}
           <button 
-            onClick={() => navigate('/attendance/in')}
-            className="group relative overflow-hidden bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-blue-100 dark:border-blue-900 flex items-center gap-4 transition-all active:scale-95 hover:border-blue-300 dark:hover:border-blue-700"
+            onClick={() => {
+                if (todayStatus.hasCheckedInToday) {
+                    alert("Anda sudah melakukan absen datang hari ini.");
+                } else {
+                    navigate('/attendance/in');
+                }
+            }}
+            disabled={todayStatus.hasCheckedInToday}
+            className={`group relative overflow-hidden p-6 rounded-2xl shadow-lg flex items-center gap-4 transition-all 
+                ${todayStatus.hasCheckedInToday 
+                    ? 'bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 opacity-75 cursor-not-allowed' 
+                    : 'bg-white dark:bg-gray-800 border border-blue-100 dark:border-blue-900 active:scale-95 hover:border-blue-300 dark:hover:border-blue-700'
+                }`}
           >
-            <div className="absolute right-0 top-0 w-24 h-24 bg-blue-50 dark:bg-blue-900/20 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
-            <div className="w-14 h-14 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-blue-200 dark:shadow-none relative z-10">
-              <LogIn size={28} />
+            {!todayStatus.hasCheckedInToday && (
+                 <div className="absolute right-0 top-0 w-24 h-24 bg-blue-50 dark:bg-blue-900/20 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+            )}
+            
+            <div className={`w-14 h-14 rounded-full flex items-center justify-center text-white relative z-10 ${todayStatus.hasCheckedInToday ? 'bg-gray-400' : 'bg-blue-600 shadow-blue-200 dark:shadow-none'}`}>
+              {todayStatus.hasCheckedInToday ? <CheckCircle size={28} /> : <LogIn size={28} />}
             </div>
             <div className="text-left relative z-10">
-              <h3 className="text-xl font-bold text-gray-800 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">Absen Datang</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Isi kehadiran saat tiba</p>
+              <h3 className={`text-xl font-bold transition-colors ${todayStatus.hasCheckedInToday ? 'text-gray-500' : 'text-gray-800 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400'}`}>
+                  {todayStatus.hasCheckedInToday ? 'Sudah Tercatat' : 'Absen Datang'}
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {todayStatus.hasCheckedInToday ? 'Anda sudah absen masuk' : 'Isi kehadiran saat tiba'}
+              </p>
             </div>
           </button>
 
+          {/* TOMBOL ABSEN PULANG */}
           <button 
-            onClick={() => navigate('/attendance/out')}
-            className="group relative overflow-hidden bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-orange-100 dark:border-orange-900 flex items-center gap-4 transition-all active:scale-95 hover:border-orange-300 dark:hover:border-orange-700"
+            onClick={() => {
+                if (todayStatus.hasCheckedOutToday) {
+                    alert("Anda sudah melakukan absen pulang hari ini.");
+                } else {
+                    navigate('/attendance/out');
+                }
+            }}
+            disabled={todayStatus.hasCheckedOutToday}
+            className={`group relative overflow-hidden p-6 rounded-2xl shadow-lg flex items-center gap-4 transition-all 
+                ${todayStatus.hasCheckedOutToday 
+                    ? 'bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 opacity-75 cursor-not-allowed' 
+                    : 'bg-white dark:bg-gray-800 border border-orange-100 dark:border-orange-900 active:scale-95 hover:border-orange-300 dark:hover:border-orange-700'
+                }`}
           >
-            <div className="absolute right-0 top-0 w-24 h-24 bg-orange-50 dark:bg-orange-900/20 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
-            <div className="w-14 h-14 bg-orange-500 rounded-full flex items-center justify-center text-white shadow-orange-200 dark:shadow-none relative z-10">
-              <LogOut size={28} />
+            {!todayStatus.hasCheckedOutToday && (
+                <div className="absolute right-0 top-0 w-24 h-24 bg-orange-50 dark:bg-orange-900/20 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+            )}
+            <div className={`w-14 h-14 rounded-full flex items-center justify-center text-white relative z-10 ${todayStatus.hasCheckedOutToday ? 'bg-gray-400' : 'bg-orange-500 shadow-orange-200 dark:shadow-none'}`}>
+              {todayStatus.hasCheckedOutToday ? <CheckCircle size={28} /> : <LogOut size={28} />}
             </div>
             <div className="text-left relative z-10">
-              <h3 className="text-xl font-bold text-gray-800 dark:text-white group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">Absen Pulang</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Isi kehadiran saat pulang</p>
+              <h3 className={`text-xl font-bold transition-colors ${todayStatus.hasCheckedOutToday ? 'text-gray-500' : 'text-gray-800 dark:text-white group-hover:text-orange-600 dark:group-hover:text-orange-400'}`}>
+                  {todayStatus.hasCheckedOutToday ? 'Sudah Tercatat' : 'Absen Pulang'}
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {todayStatus.hasCheckedOutToday ? 'Anda sudah absen pulang' : 'Isi kehadiran saat pulang'}
+              </p>
             </div>
           </button>
         </div>
@@ -238,7 +319,7 @@ export const Attendance: React.FC<AttendanceProps> = ({ specificMode }) => {
         <Card className="flex flex-col gap-3">
             <h3 className="font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-gray-700 pb-2 mb-2 flex items-center gap-2">
                 <MapPin size={18} className="text-green-600 dark:text-green-400" />
-                LOKASI (Radius 100m)
+                LOKASI (Radius {SCHOOL_LOCATION.radius}m)
             </h3>
             
             <div className="h-32 bg-blue-50 dark:bg-gray-900 rounded-lg overflow-hidden relative border border-blue-100 dark:border-gray-700 transition-all">

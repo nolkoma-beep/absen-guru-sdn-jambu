@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, MapPin, CheckCircle, AlertCircle, LogIn, LogOut, Users, RefreshCw, X } from 'lucide-react';
+import { Clock, MapPin, CheckCircle, AlertCircle, LogIn, LogOut, Users, RefreshCw, X, FileText, User, ArrowRight } from 'lucide-react';
 import { Card } from '../components/UIComponents';
-import { getTodayStatus, getUserProfile, getTodayDataFromCloud, CloudAttendance } from '../services/storageService';
+import { getTodayStatus, getUserProfile, getTodayDataFromCloud, getRecords, CloudAttendance } from '../services/storageService';
+import { AttendanceType, AttendanceRecord } from '../types';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 
@@ -10,6 +11,7 @@ export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [status, setStatus] = useState(getTodayStatus());
+  const [recentHistory, setRecentHistory] = useState<AttendanceRecord[]>([]);
   const [userName, setUserName] = useState('Pak Guru');
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
 
@@ -29,6 +31,13 @@ export const Dashboard: React.FC = () => {
     }
 
     setStatus(getTodayStatus());
+    
+    // Load Recent History (Local)
+    const records = getRecords();
+    const attRecords = records
+      .filter(r => r.type === AttendanceType.CHECK_IN || r.type === AttendanceType.CHECK_OUT)
+      .slice(0, 3) as AttendanceRecord[];
+    setRecentHistory(attRecords);
 
     return () => clearInterval(timer);
   }, []);
@@ -42,7 +51,6 @@ export const Dashboard: React.FC = () => {
   };
 
   const handleFetchRecap = async () => {
-    // Toggle tutup jika sudah terbuka
     if (showRecap) {
         setShowRecap(false);
         return;
@@ -69,7 +77,7 @@ export const Dashboard: React.FC = () => {
              {userPhoto ? (
                 <img src={userPhoto} alt="Profile" className="w-full h-full object-cover" />
              ) : (
-                <UserAvatar />
+                <User className="text-white" />
              )}
           </div>
         </div>
@@ -125,7 +133,7 @@ export const Dashboard: React.FC = () => {
                 className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-purple-100 dark:border-purple-900 shadow-sm flex flex-col items-center justify-center gap-2 hover:bg-purple-50 dark:hover:bg-gray-700 transition-colors group"
             >
                 <div className="p-3 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform">
-                    <FileTextIcon />
+                    <FileText size={24} />
                 </div>
                 <span className="font-semibold text-gray-700 dark:text-gray-300">Laporan SPPD</span>
             </button>
@@ -147,7 +155,7 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* --- REKAP SEKOLAH SECTION (Muncul jika tombol diklik) --- */}
+      {/* --- REKAP SEKOLAH SECTION --- */}
       {showRecap && (
         <div className="animate-in fade-in slide-in-from-top-4 duration-300">
              <div className="flex justify-between items-center mb-3">
@@ -213,15 +221,44 @@ export const Dashboard: React.FC = () => {
              )}
         </div>
       )}
+
+      {/* Recent Activity (Local) */}
+      {!showRecap && (
+          <div>
+            <div className="flex justify-between items-center mb-3">
+                <h3 className="text-lg font-bold text-gray-800 dark:text-white">Aktivitas Terakhir Saya</h3>
+                <button onClick={() => navigate('/history')} className="text-blue-600 dark:text-blue-400 text-xs font-medium flex items-center gap-1">
+                    Lihat Semua <ArrowRight size={12} />
+                </button>
+            </div>
+            
+            <div className="space-y-3">
+                {recentHistory.length === 0 ? (
+                    <div className="text-center py-8 text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-800 rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
+                        <p className="text-sm">Belum ada aktivitas.</p>
+                    </div>
+                ) : (
+                    recentHistory.map((record, idx) => (
+                        <Card key={idx} className="flex items-center gap-4 !p-3">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                                record.type === AttendanceType.CHECK_IN ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400' : 'bg-orange-100 dark:bg-orange-900/50 text-orange-600 dark:text-orange-400'
+                            }`}>
+                                {record.type === AttendanceType.CHECK_IN ? <MapPin size={18} /> : <Clock size={18} />}
+                            </div>
+                            <div className="flex-1">
+                                <h4 className="font-semibold text-gray-800 dark:text-gray-200 text-sm">{record.type === AttendanceType.CHECK_IN ? 'Absen Datang' : 'Absen Pulang'}</h4>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">{record.locationName || 'Lokasi terdeteksi'}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="font-bold text-gray-800 dark:text-gray-200 text-sm">{format(record.timestamp, 'HH:mm')}</p>
+                                <p className="text-[10px] text-gray-400 dark:text-gray-500">{format(record.timestamp, 'd MMM')}</p>
+                            </div>
+                        </Card>
+                    ))
+                )}
+            </div>
+          </div>
+      )}
     </div>
   );
 };
-
-// Simple Icon Wrappers
-const UserAvatar = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-);
-
-const FileTextIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-);

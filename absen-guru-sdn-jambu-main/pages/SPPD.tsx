@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Image as ImageIcon, X, User, Briefcase, UploadCloud } from 'lucide-react';
 import { Button, Input, TextArea, Card } from '../components/UIComponents';
-import { saveRecord, getUserProfile } from '../services/storageService';
+import { saveRecord, getUserProfile, compressImage } from '../services/storageService';
 import { AttendanceType, SPPDRecord } from '../types';
 import { useNavigate } from 'react-router-dom';
 
@@ -21,6 +21,7 @@ export const SPPD: React.FC = () => {
   const [attachments, setAttachments] = useState<(string | null)[]>([null, null, null, null]);
 
   const [isSaving, setIsSaving] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
 
   useEffect(() => {
     const savedProfile = getUserProfile();
@@ -33,9 +34,13 @@ export const SPPD: React.FC = () => {
   const handlePhotoUpload = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const reader = new FileReader();
-      reader.onload = (ev) => {
+      reader.onload = async (ev) => {
+        const originalBase64 = ev.target?.result as string;
+        // KOMPRESI GAMBAR SPPD
+        const compressedBase64 = await compressImage(originalBase64, 800);
+        
         const newAttachments = [...attachments];
-        newAttachments[index] = ev.target?.result as string;
+        newAttachments[index] = compressedBase64;
         setAttachments(newAttachments);
       };
       reader.readAsDataURL(e.target.files[0]);
@@ -63,6 +68,7 @@ export const SPPD: React.FC = () => {
     const validPhotos = attachments.filter(p => p !== null) as string[];
 
     setIsSaving(true);
+    setStatusMessage("Mengirim data & foto...");
     
     const record: SPPDRecord = {
         id: Date.now().toString(),
@@ -208,7 +214,7 @@ export const SPPD: React.FC = () => {
       </Card>
 
       <Button onClick={handleSave} isLoading={isSaving} className="w-full text-lg font-semibold py-4 shadow-xl shadow-purple-200 dark:shadow-none bg-purple-600 hover:bg-purple-700">
-        KIRIM LAPORAN SPPD
+        {isSaving ? statusMessage : 'KIRIM LAPORAN SPPD'}
       </Button>
     </div>
   );

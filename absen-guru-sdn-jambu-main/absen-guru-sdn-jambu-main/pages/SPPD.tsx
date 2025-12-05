@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Image as ImageIcon, X, User, Briefcase, UploadCloud } from 'lucide-react';
 import { Button, Input, TextArea, Card } from '../components/UIComponents';
-import { saveRecord, getUserProfile, compressImage } from '../services/storageService';
+import { saveRecord, getUserProfile } from '../services/storageService';
 import { AttendanceType, SPPDRecord } from '../types';
 import { useNavigate } from 'react-router-dom';
 
@@ -21,7 +21,6 @@ export const SPPD: React.FC = () => {
   const [attachments, setAttachments] = useState<(string | null)[]>([null, null, null, null]);
 
   const [isSaving, setIsSaving] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('');
 
   useEffect(() => {
     const savedProfile = getUserProfile();
@@ -34,13 +33,9 @@ export const SPPD: React.FC = () => {
   const handlePhotoUpload = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const reader = new FileReader();
-      reader.onload = async (ev) => {
-        const originalBase64 = ev.target?.result as string;
-        // KOMPRESI GAMBAR SPPD (Penting: 4 Foto bisa bikin crash jika tidak dikompres agresif)
-        const compressedBase64 = await compressImage(originalBase64, 800);
-        
+      reader.onload = (ev) => {
         const newAttachments = [...attachments];
-        newAttachments[index] = compressedBase64;
+        newAttachments[index] = ev.target?.result as string;
         setAttachments(newAttachments);
       };
       reader.readAsDataURL(e.target.files[0]);
@@ -68,7 +63,6 @@ export const SPPD: React.FC = () => {
     const validPhotos = attachments.filter(p => p !== null) as string[];
 
     setIsSaving(true);
-    setStatusMessage("Mengirim data & foto...");
     
     const record: SPPDRecord = {
         id: Date.now().toString(),
@@ -85,17 +79,11 @@ export const SPPD: React.FC = () => {
         nip: nip
     };
 
-    // Save record (Async) - Menggunakan fungsi saveRecord yang sudah distabilkan
-    const result = await saveRecord(record);
+    // Save record (Async)
+    await saveRecord(record);
     
     setIsSaving(false);
-
-    if (result.success) {
-      alert(result.message);
-      navigate('/');
-    } else {
-      alert("Gagal: " + result.message);
-    }
+    navigate('/');
   };
 
   return (
@@ -160,7 +148,7 @@ export const SPPD: React.FC = () => {
         </div>
       </Card>
 
-      {/* 3. Laporan Hasil Kegiatan (MANUAL ONLY) */}
+      {/* 3. Laporan Hasil Kegiatan */}
       <Card className="border-l-4 border-purple-500">
          <h3 className="font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-gray-700 pb-2 mb-2 flex items-center gap-2">
              <FileText size={18} className="text-purple-500" />
@@ -220,7 +208,7 @@ export const SPPD: React.FC = () => {
       </Card>
 
       <Button onClick={handleSave} isLoading={isSaving} className="w-full text-lg font-semibold py-4 shadow-xl shadow-purple-200 dark:shadow-none bg-purple-600 hover:bg-purple-700">
-        {isSaving ? statusMessage : 'KIRIM LAPORAN SPPD'}
+        KIRIM LAPORAN SPPD
       </Button>
     </div>
   );

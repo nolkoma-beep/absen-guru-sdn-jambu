@@ -2,7 +2,7 @@ import { saveUserProfile, getScriptUrl } from './storageService';
 
 const AUTH_KEY = 'guruhadir_is_authenticated';
 
-// Database Foto (Mapping Nama -> URL)
+// Database Foto (Mapping Nama -> URL) sesuai data Spreadsheet yang diberikan
 const PHOTO_DATABASE: Record<string, string> = {
   "ASEP AWALUDIN,S.Pd": "https://iili.io/fzNJbOQ.jpg",
   "MUNJI, S.Pd.I": "https://iili.io/fzN21uR.jpg",
@@ -15,37 +15,17 @@ const PHOTO_DATABASE: Record<string, string> = {
   "AMNIATUSHALIHAT, S.Pd": "https://iili.io/fzNq7ku.jpg"
 };
 
-// Database Jabatan (Mapping Nama -> Role)
-const ROLE_DATABASE: Record<string, string> = {
-  "ASEP AWALUDIN,S.Pd": "Kepala Sekolah",
-  "MUNJI, S.Pd.I": "Guru Agama",
-  "MARTINI, S.Pd.I": "Guru Kelas",
-  "MINARTI, S.Pd.I": "Guru Kelas",
-  "DEWI HOFIANTINI, S.Pd": "Guru Kelas",
-  "A. BAIRONI,S.Pd": "Guru Kelas",
-  "HERNAWATI, S.Pd": "Guru Kelas",
-  "AHMAD FAHMI, S.Pd.I": "Guru Kelas",
-  "AMNIATUSHALIHAT, S.Pd": "Guru PJOK"
-};
-
 // Helper untuk mencari foto berdasarkan nama (Case Insensitive)
 const getPhotoByName = (name: string): string | undefined => {
   if (!name) return undefined;
   const normalizedSearch = name.trim().toLowerCase();
+  
+  // Cari key yang cocok
   const matchedKey = Object.keys(PHOTO_DATABASE).find(key => 
     key.toLowerCase() === normalizedSearch
   );
+  
   return matchedKey ? PHOTO_DATABASE[matchedKey] : undefined;
-};
-
-// Helper untuk mencari jabatan berdasarkan nama (Case Insensitive)
-const getRoleByName = (name: string): string => {
-  if (!name) return "Guru Kelas"; // Default
-  const normalizedSearch = name.trim().toLowerCase();
-  const matchedKey = Object.keys(ROLE_DATABASE).find(key => 
-    key.toLowerCase() === normalizedSearch
-  );
-  return matchedKey ? ROLE_DATABASE[matchedKey] : "Guru Kelas";
 };
 
 export interface LoginResult {
@@ -67,16 +47,17 @@ export const login = async (username: string, password: string): Promise<LoginRe
         .map(word => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ') || "Guru (Demo Mode)";
       
+      // Coba cari foto juga untuk mode demo jika nama cocok
       const demoPhoto = getPhotoByName(displayName);
-      const demoRole = getRoleByName(displayName);
 
-      saveUserProfile(displayName, "198501012010011001", demoPhoto, demoRole);
+      // Default dummy photo for demo if not found
+      saveUserProfile(displayName, "198501012010011001", demoPhoto);
       return { success: true };
     }
     return { success: false, message: "Mode Offline: Password salah (Default: 123456). Atau masukkan URL Server di pengaturan." };
   }
 
-  // Validasi URL
+  // Validasi URL: Harus domain google dan berakhiran /exec
   if (!scriptUrl.includes('script.google.com')) {
      return { success: false, message: "URL tidak valid. Harap gunakan URL Google Apps Script." };
   }
@@ -109,13 +90,14 @@ export const login = async (username: string, password: string): Promise<LoginRe
       // Ambil nama dari response server
       const serverName = result.data.name;
 
-      // Cari Foto & Jabatan
+      // Logika Penentuan Foto:
+      // 1. Cek apakah server mengirimkan URL foto (future proofing)
+      // 2. Jika tidak, cari di database lokal (PHOTO_DATABASE) berdasarkan Nama
       const matchedPhoto = getPhotoByName(serverName);
       const finalPhotoUrl = result.data.photoUrl || matchedPhoto;
-      const role = getRoleByName(serverName);
       
       // Simpan profil lengkap ke storage
-      saveUserProfile(serverName, result.data.nip, finalPhotoUrl, role);
+      saveUserProfile(serverName, result.data.nip, finalPhotoUrl);
       
       return { success: true };
     } else {
@@ -126,6 +108,7 @@ export const login = async (username: string, password: string): Promise<LoginRe
     console.error("Login Error:", error);
     const errorMsg = error.message || error.toString();
 
+    // Deteksi error CORS / Network
     if (errorMsg.includes('Failed to fetch')) {
         return { 
             success: false, 
@@ -139,7 +122,8 @@ export const login = async (username: string, password: string): Promise<LoginRe
 
 export const logout = () => {
   localStorage.removeItem(AUTH_KEY);
-  // User harus login lagi untuk refresh session/data.
+  // Kita tidak menghapus data profile agar auto-fill tetap jalan,
+  // tapi user harus login lagi untuk refresh session/data.
 };
 
 export const isAuthenticated = (): boolean => {
