@@ -37,15 +37,20 @@ export const Login: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center p-6 max-w-md mx-auto transition-colors duration-200">
       <div className="text-center mb-8">
-        <div className="w-20 h-20 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center shadow-lg mx-auto mb-4 border-4 border-blue-50 dark:border-blue-900/30">
+        {/* LOGO DIPERBESAR 50% (w-20 -> w-32, w-12 -> w-20) */}
+        <div className="w-32 h-32 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center shadow-lg mx-auto mb-6 border-4 border-blue-50 dark:border-blue-900/30">
             <img 
-                src="https://iili.io/fzEDnst.png" 
+                src="https://iili.io/fA8Fe3X.png" 
                 alt="Logo Tut Wuri Handayani" 
-                className="w-12 h-12 object-contain"
+                className="w-20 h-20 object-contain"
             />
         </div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">GuruHadir</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Aplikasi Absensi SD NEGERI JAMBU</p>
+        
+        {/* Judul 'Absensi Guru' dihapus, teks di bawahnya diperbesar (text-sm -> text-xl) */}
+        <p className="text-xl font-bold text-blue-600 dark:text-blue-400 mb-2">Aplikasi Berbasis E-Lokasi Real Time</p>
+        <p className="text-xs font-bold text-gray-500 dark:text-gray-400 tracking-wide uppercase">
+            SD NEGERI JAMBU TUNJUNG TEJA - KAB. SERANG
+        </p>
       </div>
 
       <Card className="w-full shadow-xl border-t-4 border-blue-600 dark:border-blue-500">
