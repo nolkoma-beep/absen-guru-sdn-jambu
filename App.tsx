@@ -4,6 +4,7 @@ import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { Attendance } from './pages/Attendance';
 import { SPPD } from './pages/SPPD';
+import { Leave } from './pages/Leave';
 import { History } from './pages/History';
 import { Profile } from './pages/Profile';
 import { Login } from './pages/Login';
@@ -37,6 +38,7 @@ function App() {
               <Route path="attendance/out" element={<Attendance specificMode={AttendanceType.CHECK_OUT} />} />
               
               <Route path="sppd" element={<SPPD />} />
+              <Route path="leave" element={<Leave />} />
               <Route path="history" element={<History />} />
               <Route path="profile" element={<Profile />} />
               

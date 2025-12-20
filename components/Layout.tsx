@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Home, ClipboardList, FileText, User } from 'lucide-react';
+import { Home, ClipboardList, Calendar, User, FileText } from 'lucide-react';
 
 export const Layout: React.FC = () => {
   const location = useLocation();
@@ -8,6 +8,7 @@ export const Layout: React.FC = () => {
     '/': 'Beranda',
     '/attendance': 'Absensi',
     '/sppd': 'Laporan SPPD',
+    '/leave': 'Ijin / Sakit',
     '/history': 'Riwayat'
   };
 
@@ -20,7 +21,7 @@ export const Layout: React.FC = () => {
         <div className="flex items-center gap-3">
           {/* LOGO SEKOLAH / TUT WURI HANDAYANI */}
           <img 
-            src="https://iili.io/fzEDnst.png" 
+            src="https://iili.io/fA8Fe3X.png" 
             alt="Logo Tut Wuri Handayani" 
             className="w-10 h-10 object-contain drop-shadow-sm"
           />
@@ -65,6 +66,7 @@ export const Layout: React.FC = () => {
             )}
           </NavLink>
 
+          {/* TOMBOL TENGAH - TETAP SPPD */}
           <div className="-mt-8">
             <NavLink 
               to="/sppd" 

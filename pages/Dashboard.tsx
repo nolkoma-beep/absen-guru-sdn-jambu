@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, MapPin, CheckCircle, AlertCircle, LogIn, LogOut, Users, RefreshCw, X, FileText, User, ArrowRight } from 'lucide-react';
+import { Clock, MapPin, CheckCircle, AlertCircle, LogIn, LogOut, Users, RefreshCw, X, Calendar, User, ArrowRight, FileText } from 'lucide-react';
 import { Card } from '../components/UIComponents';
 import { getTodayStatus, getUserProfile, getTodayDataFromCloud, getRecords, CloudAttendance } from '../services/storageService';
 import { AttendanceType, AttendanceRecord } from '../types';
@@ -35,7 +35,7 @@ export const Dashboard: React.FC = () => {
     // Load Recent History (Local)
     const records = getRecords();
     const attRecords = records
-      .filter(r => r.type === AttendanceType.CHECK_IN || r.type === AttendanceType.CHECK_OUT)
+      .filter(r => r.type === AttendanceType.CHECK_IN || r.type === AttendanceType.CHECK_OUT || r.type === AttendanceType.LEAVE)
       .slice(0, 3) as AttendanceRecord[];
     setRecentHistory(attRecords);
 
@@ -101,7 +101,7 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Quick Actions - GRID 2x2 */}
+      {/* Quick Actions */}
       <div>
         <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-3">Aksi Cepat</h3>
         <div className="grid grid-cols-2 gap-4">
@@ -127,18 +127,18 @@ export const Dashboard: React.FC = () => {
                 <span className="font-semibold text-gray-700 dark:text-gray-300">Absen Pulang</span>
             </button>
 
-            {/* 3. Laporan SPPD */}
+            {/* 3. Ijin / Sakit (MENGGANTI KARTU SPPD DI BERANDA) */}
             <button 
-                onClick={() => navigate('/sppd')}
-                className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-purple-100 dark:border-purple-900 shadow-sm flex flex-col items-center justify-center gap-2 hover:bg-purple-50 dark:hover:bg-gray-700 transition-colors group"
+                onClick={() => navigate('/leave')}
+                className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-amber-100 dark:border-amber-900 shadow-sm flex flex-col items-center justify-center gap-2 hover:bg-amber-50 dark:hover:bg-gray-700 transition-colors group"
             >
-                <div className="p-3 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform">
-                    <FileText size={24} />
+                <div className="p-3 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400 group-hover:scale-110 transition-transform">
+                    <Calendar size={24} />
                 </div>
-                <span className="font-semibold text-gray-700 dark:text-gray-300">Laporan SPPD</span>
+                <span className="font-semibold text-gray-700 dark:text-gray-300">Ijin / Sakit</span>
             </button>
 
-            {/* 4. Rekap Sekolah (Baru) */}
+            {/* 4. Rekap Sekolah */}
             <button 
                 onClick={handleFetchRecap}
                 className={`p-4 rounded-xl border shadow-sm flex flex-col items-center justify-center gap-2 transition-all group ${
@@ -151,6 +151,17 @@ export const Dashboard: React.FC = () => {
                     <Users size={24} />
                 </div>
                 <span className="font-semibold text-gray-700 dark:text-gray-300">Rekap Sekolah</span>
+            </button>
+
+            {/* 5. SPPD (Tetap ada akses di Beranda agar tidak hilang) */}
+            <button 
+                onClick={() => navigate('/sppd')}
+                className="col-span-2 bg-white dark:bg-gray-800 p-3 rounded-xl border border-purple-100 dark:border-purple-900 shadow-sm flex items-center justify-center gap-3 hover:bg-purple-50 dark:hover:bg-gray-700 transition-colors group"
+            >
+                <div className="p-2 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform">
+                    <FileText size={20} />
+                </div>
+                <span className="font-semibold text-gray-700 dark:text-gray-300">Laporan SPPD</span>
             </button>
         </div>
       </div>
@@ -196,7 +207,9 @@ export const Dashboard: React.FC = () => {
                              <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 font-bold text-sm ${
                                  item.type === 'DATANG' 
                                  ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' 
-                                 : 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400'
+                                 : item.type === 'PULANG'
+                                 ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400'
+                                 : 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400'
                              }`}>
                                  {item.name.charAt(0)}
                              </div>
@@ -208,7 +221,10 @@ export const Dashboard: React.FC = () => {
                                      </span>
                                  </div>
                                  <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-0.5 truncate">
-                                     <span className={`font-bold ${item.type === 'DATANG' ? 'text-green-600' : 'text-orange-600'}`}>
+                                     <span className={`font-bold ${
+                                         item.type === 'DATANG' ? 'text-green-600' : 
+                                         item.type === 'PULANG' ? 'text-orange-600' : 'text-amber-600'
+                                     }`}>
                                          {item.type}
                                      </span>
                                      <span>•</span>
@@ -241,13 +257,20 @@ export const Dashboard: React.FC = () => {
                     recentHistory.map((record, idx) => (
                         <Card key={idx} className="flex items-center gap-4 !p-3">
                             <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-                                record.type === AttendanceType.CHECK_IN ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400' : 'bg-orange-100 dark:bg-orange-900/50 text-orange-600 dark:text-orange-400'
+                                record.type === AttendanceType.CHECK_IN ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400' : 
+                                record.type === AttendanceType.CHECK_OUT ? 'bg-orange-100 dark:bg-orange-900/50 text-orange-600 dark:text-orange-400' :
+                                'bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400'
                             }`}>
-                                {record.type === AttendanceType.CHECK_IN ? <MapPin size={18} /> : <Clock size={18} />}
+                                {record.type === AttendanceType.CHECK_IN ? <LogIn size={18} /> : 
+                                 record.type === AttendanceType.CHECK_OUT ? <LogOut size={18} /> : 
+                                 <Calendar size={18} />}
                             </div>
                             <div className="flex-1">
-                                <h4 className="font-semibold text-gray-800 dark:text-gray-200 text-sm">{record.type === AttendanceType.CHECK_IN ? 'Absen Datang' : 'Absen Pulang'}</h4>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">{record.locationName || 'Lokasi terdeteksi'}</p>
+                                <h4 className="font-semibold text-gray-800 dark:text-gray-200 text-sm">
+                                    {record.type === AttendanceType.CHECK_IN ? 'Absen Datang' : 
+                                     record.type === AttendanceType.CHECK_OUT ? 'Absen Pulang' : 'Ijin / Sakit'}
+                                </h4>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">{record.locationName || record.notes || 'Data tercatat'}</p>
                             </div>
                             <div className="text-right">
                                 <p className="font-bold text-gray-800 dark:text-gray-200 text-sm">{format(record.timestamp, 'HH:mm')}</p>

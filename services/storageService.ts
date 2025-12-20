@@ -1,4 +1,4 @@
-import { AttendanceRecord, AttendanceType, SPPDRecord } from '../types';
+import { AttendanceRecord, AttendanceType, SPPDRecord, LeaveRecord } from '../types';
 
 const STORAGE_KEY = 'guruhadir_records';
 const PROFILE_KEY = 'guruhadir_user_profile';
@@ -7,12 +7,12 @@ const SCRIPT_URL_KEY = 'guruhadir_script_url';
 // URL BARU DARI PENGGUNA
 const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzlX7ZuWc0lyuq3asy8i-oTZTXAupcpTeLDP57Bj3ZgtBee1warYqqtA1AhP7IqjoKP6A/exec';
 
-export const getRecords = (): (AttendanceRecord | SPPDRecord)[] => {
+export const getRecords = (): (AttendanceRecord | SPPDRecord | LeaveRecord)[] => {
   const data = localStorage.getItem(STORAGE_KEY);
   return data ? JSON.parse(data) : [];
 };
 
-export const saveRecord = async (record: AttendanceRecord | SPPDRecord): Promise<{ success: boolean; message: string }> => {
+export const saveRecord = async (record: AttendanceRecord | SPPDRecord | LeaveRecord): Promise<{ success: boolean; message: string }> => {
   try {
     // 1. Simpan Lokal Dulu (Agar data aman jika offline)
     saveToLocalStorage(record);
@@ -33,16 +33,16 @@ export const saveRecord = async (record: AttendanceRecord | SPPDRecord): Promise
 };
 
 // Fungsi Sinkronisasi ke Google Sheets (Backend Baru)
-const syncToGoogleSheets = async (url: string, record: AttendanceRecord | SPPDRecord) => {
+const syncToGoogleSheets = async (url: string, record: AttendanceRecord | SPPDRecord | LeaveRecord) => {
   try {
     // Persiapkan Payload sesuai Backend Baru
     const payload: any = {
       action: 'save_record',
       id: record.id,
-      timestamp: record.timestamp, // Script akan mengonversi ini jadi tanggal folder
+      timestamp: record.timestamp,
       nama: record.name, 
       nip: record.nip,
-      status: record.type, // DATANG, PULANG, atau SPPD
+      status: record.type,
       lokasi: record.locationName || '',
       latitude: record.latitude,
       longitude: record.longitude,
@@ -58,7 +58,6 @@ const syncToGoogleSheets = async (url: string, record: AttendanceRecord | SPPDRe
       payload.tanggal_selesai = sppd.endDate;
       payload.laporan = sppd.reportSummary;
       
-      // Kirim Foto SPPD (Multi file)
       if (sppd.attachments && Array.isArray(sppd.attachments)) {
         payload.foto_1 = sppd.attachments[0] || '';
         payload.foto_2 = sppd.attachments[1] || '';
@@ -66,14 +65,14 @@ const syncToGoogleSheets = async (url: string, record: AttendanceRecord | SPPDRe
         payload.foto_4 = sppd.attachments[3] || '';
       }
     } else {
-      // Mapping Absen Biasa (Datang/Pulang) -> Single Foto
+      // Mapping Absen Biasa (Datang/Pulang/Ijin) -> Single Foto
       payload.foto = record.photoUrl || '';
     }
 
     const response = await fetch(url, {
       method: 'POST',
       redirect: 'follow',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // Penting: text/plain agar tidak preflight
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload)
     });
     
@@ -84,7 +83,7 @@ const syncToGoogleSheets = async (url: string, record: AttendanceRecord | SPPDRe
 
   } catch (e) {
     console.error("Gagal sync ke Google Sheets:", e);
-    throw e; // Lempar error agar bisa ditangkap saveRecord
+    throw e;
   }
 };
 
@@ -157,7 +156,7 @@ export const getTodayDataFromCloud = async (): Promise<CloudAttendance[]> => {
 
 // --- LOCAL STORAGE HELPERS ---
 
-const saveToLocalStorage = (record: AttendanceRecord | SPPDRecord) => {
+const saveToLocalStorage = (record: AttendanceRecord | SPPDRecord | LeaveRecord) => {
   try {
     const records = getRecords();
     const newRecords = [record, ...records];
@@ -209,7 +208,6 @@ export const saveScriptUrl = (url: string) => {
 };
 
 export const getScriptUrl = (): string => {
-  // Menggunakan URL yang hardcoded di atas
   return DEFAULT_SCRIPT_URL;
 };
 
@@ -230,27 +228,6 @@ export const getTodayStatus = () => {
     hasCheckedOutToday: !!checkOut,
     checkInTime: checkIn?.timestamp,
     checkOutTime: checkOut?.timestamp
-  };
-};
-
-export const getMonthlyStats = () => {
-  const records = getRecords();
-  const now = new Date();
-  const currentMonth = now.getMonth(); 
-  const currentYear = now.getFullYear();
-
-  const thisMonthRecords = records.filter(r => {
-    const d = new Date(r.timestamp);
-    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-  });
-
-  const hadirCount = thisMonthRecords.filter(r => r.type === AttendanceType.CHECK_IN).length;
-  const sppdCount = thisMonthRecords.filter(r => r.type === AttendanceType.SPPD).length;
-
-  return {
-    hadir: hadirCount,
-    sppd: sppdCount,
-    monthName: now.toLocaleString('id-ID', { month: 'long' })
   };
 };
 

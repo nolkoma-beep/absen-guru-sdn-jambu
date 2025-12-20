@@ -1,7 +1,8 @@
 export enum AttendanceType {
   CHECK_IN = 'DATANG',
   CHECK_OUT = 'PULANG',
-  SPPD = 'SPPD'
+  SPPD = 'SPPD',
+  LEAVE = 'IJIN'
 }
 
 export interface AttendanceRecord {
@@ -25,6 +26,13 @@ export interface SPPDRecord extends AttendanceRecord {
   endDate: string;
   reportSummary: string;
   attachments: string[]; // 4 Photos
+}
+
+export interface LeaveRecord extends AttendanceRecord {
+  leaveType: 'IJIN' | 'SAKIT';
+  reason: string;
+  startDate: string;
+  endDate: string;
 }
 
 export interface UserState {
